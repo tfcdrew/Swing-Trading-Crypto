@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swing Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0f12;
+  --bg2: #13161b;
+  --bg3: #1a1e26;
+  --bg4: #222733;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8eaf0;
+  --text2: #8b90a0;
+  --text3: #4a5060;
+  --green: #00c896;
+  --green-dim: rgba(0,200,150,0.12);
+  --green-border: rgba(0,200,150,0.3);
+  --red: #ff4d6a;
+  --red-dim: rgba(255,77,106,0.1);
+  --red-border: rgba(255,77,106,0.3);
+  --amber: #f5a623;
+  --amber-dim: rgba(245,166,35,0.1);
+  --amber-border: rgba(245,166,35,0.3);
+  --blue: #4d9fff;
+  --purple: #9b7fff;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'IBM Plex Sans', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* Layout */
+.app { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 12px; }
+.header-left { display: flex; align-items: center; gap: 14px; }
+.logo { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); letter-spacing: 0.08em; }
+.logo span { color: var(--green); }
+.live-pill { display: flex; align-items: center; gap: 6px; background: var(--green-dim); border: 1px solid var(--green-border); border-radius: 20px; padding: 3px 10px; font-size: 11px; font-family: var(--mono); color: var(--green); }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(0.8)} }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.refresh-btn { font-family: var(--mono); font-size: 11px; padding: 6px 14px; border: 1px solid var(--border2); border-radius: 4px; background: var(--bg3); color: var(--text2); cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; }
+.refresh-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+#upd { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+
+/* Controls */
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.cg { display: flex; align-items: center; gap: 8px; background: var(--bg2); padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border); font-size: 11px; font-family: var(--mono); color: var(--text2); }
+.cg label { white-space: nowrap; }
+.cg input[type=range] { width: 80px; accent-color: var(--green); cursor: pointer; }
+.cg .val { color: var(--text); font-weight: 500; min-width: 36px; }
+
+/* Banners */
+.banner { border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; display: none; font-size: 12px; font-family: var(--mono); }
+.banner.buy { display: block; background: var(--green-dim); border: 1px solid var(--green-border); color: var(--green); }
+.banner.sell { display: block; background: var(--red-dim); border: 1px solid var(--red-border); color: var(--red); }
+.banner.warn { display: block; background: var(--amber-dim); border: 1px solid var(--amber-border); color: var(--amber); }
+.ebtn { display: inline-block; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer; text-decoration: none; margin-top: 7px; border: 1px solid currentColor; background: transparent; color: inherit; font-family: var(--mono); }
+
+/* Error */
+.err { background: var(--red-dim); border: 1px solid var(--red-border); border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; font-size: 12px; font-family: var(--mono); color: var(--red); display: none; }
+
+/* Grid */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 1.25rem; }
+@media(max-width:700px){ .grid { grid-template-columns: 1fr; } }
+
+/* Cards */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; transition: border-color 0.2s; }
+.card.buy-sig { border-color: var(--green); box-shadow: 0 0 0 1px var(--green-dim); }
+.card.sell-sig { border-color: var(--red); box-shadow: 0 0 0 1px var(--red-dim); }
+.card.warn-sig { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber-dim); }
+
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.coin-meta {}
+.coin-name { font-family: var(--mono); font-size: 12px; color: var(--text2); letter-spacing: 0.08em; margin-bottom: 4px; }
+.coin-price { font-family: var(--mono); font-size: 26px; font-weight: 500; color: var(--text); line-height: 1; margin-bottom: 4px; }
+.coin-change { font-family: var(--mono); font-size: 11px; }
+.up { color: var(--green); } .dn { color: var(--red); }
+
+.badge { font-family: var(--mono); font-size: 10px; padding: 4px 9px; border-radius: 4px; font-weight: 500; letter-spacing: 0.06em; white-space: nowrap; }
+.b-buy { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
+.b-sell { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-border); }
+.b-warn { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
+.b-watch { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
+
+/* Chart */
+.chart-wrap { position: relative; width: 100%; height: 180px; margin: 10px 0; background: var(--bg); border-radius: 6px; overflow: hidden; }
+
+/* Indicators */
+.inds { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 10px; }
+.ibox { background: var(--bg3); border-radius: 6px; padding: 8px 10px; border: 1px solid var(--border); }
+.ilbl { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-bottom: 4px; letter-spacing: 0.06em; }
+.ival { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--text); }
+.ival.ok { color: var(--green); } .ival.wrn { color: var(--amber); } .ival.danger { color: var(--red); }
+.bar-t { height: 3px; background: var(--bg4); border-radius: 2px; margin-top: 5px; }
+.bar-f { height: 3px; border-radius: 2px; transition: width 0.4s ease; }
+.bf-ok { background: var(--green); } .bf-warn { background: var(--amber); } .bf-sell { background: var(--red); } .bf-def { background: var(--purple); }
+
+/* Wave row */
+.wave-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.wbadge { font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 4px; font-weight: 500; letter-spacing: 0.06em; }
+.w2 { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
+.w3 { background: rgba(77,159,255,0.1); color: var(--blue); border: 1px solid rgba(77,159,255,0.3); }
+.w4 { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
+.w5 { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
+.wunk { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
+.wdesc { font-size: 11px; color: var(--text2); }
+.wconf { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-left: auto; }
+
+/* Fib levels */
+.fib-row { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.fib-lbl { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-bottom: 6px; letter-spacing: 0.06em; }
+.fib-levels { display: flex; flex-wrap: wrap; gap: 4px; }
+.fp { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border); color: var(--text3); background: var(--bg3); }
+.fp.near { background: var(--amber-dim); color: var(--amber); border-color: var(--amber-border); }
+.fp.resist { background: var(--red-dim); color: var(--red); border-color: var(--red-border); }
+.fp.support { background: var(--green-dim); color: var(--green); border-color: var(--green-border); }
+
+/* Sell row */
+.sell-row { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text2); font-family: var(--mono); }
+.sell-row strong { color: var(--text3); font-size: 10px; letter-spacing: 0.06em; display: block; margin-bottom: 3px; }
+
+/* Legend */
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 1.25rem; padding: 10px 14px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border); }
+.li { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--text2); }
+.ls { width: 16px; height: 2px; border-radius: 1px; display: inline-block; }
+.ls.dashed { background: repeating-linear-gradient(90deg, currentColor 0, currentColor 4px, transparent 4px, transparent 8px); height: 1px; }
+
+/* EW key */
+.ew-key { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 1.25rem; padding: 10px 14px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border); }
+.ew-key .klabel { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: 0.08em; margin-right: 4px; }
+.ew-key .kitem { display: flex; align-items: center; gap: 5px; }
+.ew-key .kdesc { font-size: 11px; color: var(--text2); }
+
+/* Confluence meter */
+.conf-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.conf-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: 0.06em; }
+.conf-dots { display: flex; gap: 4px; }
+.conf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bg4); border: 1px solid var(--border); }
+.conf-dot.lit-buy { background: var(--green); border-color: var(--green); }
+.conf-dot.lit-sell { background: var(--red); border-color: var(--red); }
+.conf-text { font-family: var(--mono); font-size: 10px; color: var(--text2); margin-left: 4px; }
+
+/* Log */
+.log-section { background: var(--bg2); border-radius: 10px; border: 1px solid var(--border); padding: 1rem 1.25rem; }
+.ltitle { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-bottom: 10px; letter-spacing: 0.1em; }
+.lrow { font-family: var(--mono); font-size: 11px; color: var(--text2); padding: 5px 0; border-bottom: 1px solid var(--border); display: flex; gap: 14px; }
+.lrow:last-child { border-bottom: none; }
+.lrow .lt { color: var(--text3); min-width: 68px; }
+.lrow.sig { color: var(--green); }
+.lrow.sell { color: var(--red); }
+.lrow.wrn { color: var(--amber); }
+
+.loading { padding: 3rem; text-align: center; font-family: var(--mono); font-size: 12px; color: var(--text3); }
+
+/* Signal strength */
+.sig-strength { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+.sig-strength.strong { color: var(--green); }
+.sig-strength.medium { color: var(--amber); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">SWING<span>//</span>MONITOR</div>
+      <div class="live-pill"><span class="live-dot"></span>LIVE</div>
+    </div>
+    <div class="header-right">
+      <span id="upd"></span>
+      <button class="refresh-btn" onclick="fetchAll()">↻ REFRESH</button>
+    </div>
+  </div>
+
+  <div id="err" class="err"></div>
+  <div id="buy-b" class="banner buy"></div>
+  <div id="sell-b" class="banner sell"></div>
+  <div id="warn-b" class="banner warn"></div>
+
+  <div class="controls">
+    <div class="cg">
+      <label>RSI BUY &lt;</label>
+      <input type="range" min="20" max="45" value="30" step="1" id="rsi-b" oninput="document.getElementById('rbv').textContent=this.value;evaluate()">
+      <span class="val" id="rbv">30</span>
+    </div>
+    <div class="cg">
+      <label>RSI SELL &gt;</label>
+      <input type="range" min="60" max="85" value="70" step="1" id="rsi-s" oninput="document.getElementById('rsv').textContent=this.value;evaluate()">
+      <span class="val" id="rsv">70</span>
+    </div>
+    <div class="cg">
+      <label>BB</label>
+      <input type="range" min="1" max="3" value="2" step="0.5" id="bb-t" oninput="document.getElementById('bbv').textContent=parseFloat(this.value).toFixed(1)+'σ';evaluate()">
+      <span class="val" id="bbv">2.0σ</span>
+    </div>
+    <div class="cg">
+      <label>CONFLUENCE</label>
+      <input type="range" min="1" max="3" value="2" step="1" id="conf-t" oninput="document.getElementById('confv').textContent=this.value;evaluate()">
+      <span class="val" id="confv">2</span>
+    </div>
+    <div class="cg">
+      <label>EW LOOKBACK</label>
+      <input type="range" min="20" max="60" value="40" step="5" id="ew-t" oninput="document.getElementById('ewv').textContent=this.value+'h';evaluate()">
+      <span class="val" id="ewv">40h</span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="li"><span class="ls" style="background:#4d9fff"></span>CANDLES</div>
+    <div class="li"><span class="ls" style="background:#00c896"></span>BB LOWER</div>
+    <div class="li"><span class="ls" style="background:#ff4d6a"></span>BB UPPER</div>
+    <div class="li"><span class="ls" style="background:#9b7fff"></span>BB MID</div>
+    <div class="li"><span class="ls dashed" style="color:#f5a623"></span>FIB 0.618</div>
+    <div class="li"><span class="ls dashed" style="color:#4d9fff"></span>FIB 0.382</div>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="card"><div class="loading">LOADING BTC-USD...</div></div>
+    <div class="card"><div class="loading">LOADING ETH-USD...</div></div>
+  </div>
+
+  <div class="ew-key">
+    <span class="klabel">ELLIOTT WAVE:</span>
+    <div class="kitem"><span class="wbadge w2">W2</span><span class="kdesc">corrective bottom — buy zone</span></div>
+    <div class="kitem"><span class="wbadge w3">W3</span><span class="kdesc">impulse up — strongest move</span></div>
+    <div class="kitem"><span class="wbadge w4">W4</span><span class="kdesc">minor pullback</span></div>
+    <div class="kitem"><span class="wbadge w5">W5</span><span class="kdesc">exhaustion — consider exit</span></div>
+  </div>
+
+  <div class="log-section">
+    <div class="ltitle">SIGNAL LOG</div>
+    <div id="log-rows"><div class="lrow"><span class="lt">--:--:--</span><span>INITIALIZING...</span></div></div>
+  </div>
+
+</div>
+
+<script>
+const BASE = 'https://api.exchange.coinbase.com';
+const PAIRS = [
+  { id: 'BTC-USD', label: 'BTC/USD' },
+  { id: 'ETH-USD', label: 'ETH/USD' }
+];
+const FIBS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+let state = {}, charts = {}, logs = [];
+
+const ts = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const fmt = v => v >= 1000 ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v.toFixed(2);
+
+function showErr(msg) {
+  const el = document.getElementById('err');
+  el.style.display = msg ? 'block' : 'none';
+  if (msg) el.textContent = '⚠ ' + msg;
+}
+
+// --- Indicators ---
+function calcRSI(c, p = 14) {
+  if (c.length < p + 1) return null;
+  let g = 0, l = 0;
+  for (let i = c.length - p; i < c.length; i++) { const d = c[i] - c[i - 1]; d > 0 ? g += d : l += Math.abs(d); }
+  return l === 0 ? 100 : 100 - 100 / (1 + g / l);
+}
+
+function calcBB(c, p = 20, m = 2) {
+  if (c.length < p) return null;
+  const sl = c.slice(-p), mn = sl.reduce((a, b) => a + b, 0) / p;
+  const sd = Math.sqrt(sl.map(x => (x - mn) ** 2).reduce((a, b) => a + b, 0) / p);
+  return { upper: mn + m * sd, lower: mn - m * sd, mid: mn };
+}
+
+function calcFib(c, lb = 60) {
+  const sl = c.slice(-Math.min(lb, c.length));
+  const hi = Math.max(...sl), lo = Math.min(...sl), rng = hi - lo;
+  const lvls = {};
+  FIBS.forEach(f => { lvls[f] = lo + rng * (1 - f); });
+  return { hi, lo, lvls };
+}
+
+function nearFib(price, fib, tol = 0.008) {
+  return FIBS.filter(f => Math.abs(price - fib.lvls[f]) / price < tol);
+}
+
+function findPivots(c, w = 3) {
+  const hi = [], lo = [];
+  for (let i = w; i < c.length - w; i++) {
+    const sl = c.slice(i - w, i + w + 1);
+    if (c[i] === Math.max(...sl)) hi.push({ i, v: c[i] });
+    if (c[i] === Math.min(...sl)) lo.push({ i, v: c[i] });
+  }
+  return { hi, lo };
+}
+
+function estimateEW(c, lb = 40) {
+  const r = c.slice(-Math.min(lb, c.length));
+  if (r.length < 15) return { wave: '?', label: 'Counting...', confidence: 'low' };
+  const { hi, lo } = findPivots(r, 3);
+  if (hi.length < 2 || lo.length < 2) return { wave: '?', label: 'Counting...', confidence: 'low' };
+  const lh = hi[hi.length - 1], ph = hi[hi.length - 2], ll = lo[lo.length - 1];
+  const cur = r[r.length - 1], rhi = Math.max(...r), rlo = Math.min(...r), rng = rhi - rlo;
+  if (rng === 0) return { wave: '?', label: 'Counting...', confidence: 'low' };
+  const pos = (cur - rlo) / rng;
+  const rs = (r[r.length - 1] - r[Math.max(0, r.length - 6)]) / 5;
+  const ms = r.length > 20 ? (r[r.length - 10] - r[r.length - 20]) / 10 : 0;
+  if (ll.i > lh.i && pos < 0.35 && rs > 0) return { wave: '2', label: 'Wave 2 — buy zone', confidence: 'moderate', buySignal: true };
+  if (lh.i > ll.i && lh.v > ph.v && pos > 0.5 && rs > 0 && ms > 0) return { wave: '3', label: 'Wave 3 — impulse up', confidence: 'moderate' };
+  if (ll.i > lh.i && pos > 0.3 && pos < 0.6 && Math.abs(rs) < Math.abs(ms) * 0.5) return { wave: '4', label: 'Wave 4 — pullback', confidence: 'low' };
+  if (lh.i > ll.i && pos > 0.75 && lh.v > ph.v && rs < ms * 0.5 && rs > 0) return { wave: '5', label: 'Wave 5 — exhaustion', confidence: 'moderate', warnSignal: true };
+  return { wave: '?', label: 'Counting...', confidence: 'low' };
+}
+
+// --- Tightened signal logic: each signal scores 1 point, require N confluence ---
+function scoreBuySignals(s, rsiB) {
+  const hits = [];
+  // RSI oversold
+  if (s.rsi != null && s.rsi < rsiB) hits.push(`RSI ${s.rsi.toFixed(1)}`);
+  // Price at or below BB lower
+  if (s.bb && s.price <= s.bb.lower * 1.002) hits.push('BB lower');
+  // Elliott Wave 2
+  if (s.ew && s.ew.buySignal) hits.push('EW W2');
+  // Price near Fib support (0.618 or 0.786)
+  if (s.fib) { const nr = nearFib(s.price, s.fib, 0.01).filter(f => f >= 0.618); if (nr.length) hits.push(`Fib ${nr[0].toFixed(3)} support`); }
+  return hits;
+}
+
+function scoreSellSignals(s, rsiS) {
+  const hits = [];
+  // RSI overbought
+  if (s.rsi != null && s.rsi > rsiS) hits.push(`RSI ${s.rsi.toFixed(1)}`);
+  // Price at or above BB upper
+  if (s.bb && s.price >= s.bb.upper * 0.998) hits.push('BB upper');
+  // Elliott Wave 5
+  if (s.ew && s.ew.warnSignal) hits.push('EW W5');
+  // Price near Fib resistance (0.236 or 0.382)
+  if (s.fib) { const nr = nearFib(s.price, s.fib, 0.01).filter(f => f <= 0.382); if (nr.length) hits.push(`Fib ${nr[0].toFixed(3)} resistance`); }
+  return hits;
+}
+
+function evaluate() {
+  const rsiB = parseFloat(document.getElementById('rsi-b').value);
+  const rsiS = parseFloat(document.getElementById('rsi-s').value);
+  const bbM = parseFloat(document.getElementById('bb-t').value);
+  const confT = parseInt(document.getElementById('conf-t').value);
+  const ewLB = parseInt(document.getElementById('ew-t').value);
+  const buys = [], sells = [], warns = [];
+
+  PAIRS.forEach(({ id, label }) => {
+    const s = state[id];
+    if (!s || !s.closes || s.closes.length < 25) return;
+    s.bb = calcBB(s.closes, 20, bbM);
+    s.rsi = calcRSI(s.closes);
+    s.ew = estimateEW(s.closes, ewLB);
+    s.fib = calcFib(s.closes, 60);
+    s.buyHits = scoreBuySignals(s, rsiB);
+    s.sellHits = scoreSellSignals(s, rsiS);
+    s.anyBuy = s.buyHits.length >= confT;
+    s.anySell = s.sellHits.length >= confT;
+    s.anyWarn = !!(s.ew && s.ew.warnSignal && !s.anySell && s.sellHits.length >= 1);
+    if (s.anyBuy) buys.push(`${label}: ${s.buyHits.join(' + ')}`);
+    if (s.anySell) sells.push(`${label}: ${s.sellHits.join(' + ')}`);
+    if (s.anyWarn) warns.push(`${label}: EW W5 forming`);
+    renderCard(id, label);
+  });
+
+  function setBanner(elId, cls, txt, subj, body) {
+    const el = document.getElementById(elId);
+    if (txt) { el.className = 'banner ' + cls; el.innerHTML = txt + '<br><a class="ebtn" href="mailto:?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body) + '">✉ SEND ALERT</a>'; }
+    else el.className = 'banner';
+  }
+  setBanner('buy-b', 'buy', buys.length ? '▲ BUY SIGNAL — ' + buys.join(' | ') : '', 'Crypto Buy Signal', 'Buy signals detected:\n\n' + buys.join('\n') + '\n\nTime: ' + new Date().toLocaleString());
+  setBanner('sell-b', 'sell', sells.length ? '▼ SELL SIGNAL — ' + sells.join(' | ') : '', 'Crypto Sell Signal', 'Sell signals detected:\n\n' + sells.join('\n') + '\n\nTime: ' + new Date().toLocaleString());
+  setBanner('warn-b', 'warn', warns.length && !sells.length ? '⚡ CAUTION — ' + warns.join(' | ') : '', 'Crypto W5 Warning', 'Wave 5 caution:\n\n' + warns.join('\n') + '\n\nTime: ' + new Date().toLocaleString());
+}
+
+function renderCard(id, label) {
+  const s = state[id];
+  if (!s) return;
+  const el = document.getElementById('c-' + id);
+  if (!el) return;
+  el.className = 'card' + (s.anySell ? ' sell-sig' : s.anyBuy ? ' buy-sig' : s.anyWarn ? ' warn-sig' : '');
+
+  const rsiB = parseFloat(document.getElementById('rsi-b').value);
+  const rsiS = parseFloat(document.getElementById('rsi-s').value);
+  const confT = parseInt(document.getElementById('conf-t').value);
+  const { rsi, bb, fib, price, change, buyHits = [], sellHits = [] } = s;
+  const ew = s.ew || { wave: '?', label: 'Counting...', confidence: 'low' };
+  const chgCls = change >= 0 ? 'up' : 'dn';
+
+  let badge = '<span class="badge b-watch">WATCHING</span>';
+  if (s.anySell) badge = '<span class="badge b-sell">▼ SELL</span>';
+  else if (s.anyBuy) badge = '<span class="badge b-buy">▲ BUY</span>';
+  else if (s.anyWarn) badge = '<span class="badge b-warn">⚡ CAUTION</span>';
+
+  const rsiPct = rsi != null ? Math.min(100, Math.max(0, rsi)) : 50;
+  const rsiCls = rsi != null && rsi < rsiB ? 'ok' : rsi != null && rsi > rsiS ? 'danger' : '';
+  const rsiBCls = rsi != null && rsi < rsiB ? 'bf-ok' : rsi != null && rsi > rsiS ? 'bf-sell' : 'bf-def';
+  const bbPct = bb && price ? Math.min(100, Math.max(0, ((price - bb.lower) / (bb.upper - bb.lower)) * 100)) : 50;
+  const bbCls = s.anyBuy && bb && price <= bb.lower * 1.002 ? 'ok' : bbPct > 92 ? 'danger' : '';
+  const bbBCls = bbCls === 'ok' ? 'bf-ok' : bbCls === 'danger' ? 'bf-sell' : 'bf-def';
+  const ewWCls = { 2: 'w2', 3: 'w3', 4: 'w4', 5: 'w5' }[parseInt(ew.wave)] || 'wunk';
+  const ewValCls = ew.buySignal ? 'ok' : ew.warnSignal ? 'wrn' : '';
+
+  const fibPills = fib ? FIBS.map(f => {
+    const v = fib.lvls[f];
+    const isNear = nearFib(price, fib, 0.01).includes(f);
+    const cls = isNear ? (f <= 0.382 ? 'resist' : f >= 0.618 ? 'support' : 'near') : '';
+    return `<span class="fp ${cls}">${f === 0 ? '0%' : f === 1 ? '100%' : (f * 100).toFixed(1) + '%'} $${v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2)}</span>`;
+  }).join('') : '—';
+
+  // Confluence dots
+  const maxDots = 4;
+  const activeBuy = s.anyBuy || s.anyWarn ? buyHits.length : 0;
+  const activeSell = s.anySell ? sellHits.length : 0;
+  const dotColor = s.anySell ? 'lit-sell' : 'lit-buy';
+  const activeCount = s.anySell ? activeSell : activeBuy;
+  const confDots = Array(maxDots).fill(0).map((_, i) => `<span class="conf-dot ${i < activeCount ? dotColor : ''}"></span>`).join('');
+  const confLabel = s.anySell ? `${activeSell}/4 sell signals` : `${activeBuy}/4 buy signals`;
+  const confStrength = activeCount >= 3 ? 'strong' : activeCount >= 2 ? 'medium' : '';
+
+  const activeHits = s.anySell ? sellHits : buyHits;
+
+  el.innerHTML = `
+    <div class="card-header">
+      <div class="coin-meta">
+        <div class="coin-name">${label}</div>
+        <div class="coin-price">$${fmt(price)}</div>
+        <div class="coin-change ${chgCls}">${change >= 0 ? '+' : ''}${change.toFixed(2)}% (24H)</div>
+      </div>
+      ${badge}
+    </div>
+    <div class="chart-wrap"><canvas id="ch-${id}" role="img" aria-label="${label} candlestick chart"></canvas></div>
+    <div class="conf-row">
+      <span class="conf-label">CONFLUENCE</span>
+      <div class="conf-dots">${confDots}</div>
+      <span class="conf-text sig-strength ${confStrength}">${confLabel}</span>
+    </div>
+    <div class="inds">
+      <div class="ibox">
+        <div class="ilbl">RSI (14)</div>
+        <div class="ival ${rsiCls}">${rsi != null ? rsi.toFixed(1) : '--'}</div>
+        <div class="bar-t"><div class="bar-f ${rsiBCls}" style="width:${rsiPct.toFixed(0)}%"></div></div>
+      </div>
+      <div class="ibox">
+        <div class="ilbl">BB BAND POS</div>
+        <div class="ival ${bbCls}">${bbPct ? bbPct.toFixed(0) + '%' : '--'}</div>
+        <div class="bar-t"><div class="bar-f ${bbBCls}" style="width:${Math.min(100, bbPct).toFixed(0)}%"></div></div>
+      </div>
+      <div class="ibox">
+        <div class="ilbl">EW CONF</div>
+        <div class="ival ${ewValCls}">${ew.confidence ? ew.confidence.toUpperCase() : '--'}</div>
+      </div>
+    </div>
+    <div class="wave-row">
+      <span class="wbadge ${ewWCls}">W${ew.wave}</span>
+      <span class="wdesc">${ew.label}</span>
+      <span class="wconf">${ew.confidence || ''}</span>
+    </div>
+    <div class="fib-row">
+      <div class="fib-lbl">FIBONACCI RETRACEMENT</div>
+      <div class="fib-levels">${fibPills}</div>
+    </div>
+    <div class="sell-row">
+      <strong>ACTIVE SIGNALS</strong>
+      ${activeHits.length ? activeHits.join(' · ') : 'NONE — monitoring'}
+    </div>`;
+  renderChart(id);
+}
+
+function renderChart(id) {
+  const s = state[id];
+  if (!s || !s.ohlc) return;
+  const canvas = document.getElementById('ch-' + id);
+  if (!canvas) return;
+  if (charts[id]) { charts[id].destroy(); }
+
+  const ohlc = s.ohlc.slice(-48);
+  const n = ohlc.length;
+  const closes = ohlc.map(c => c[4]);
+  const bb = s.bb;
+  const fib = s.fib;
+
+  // Build candlestick-style bars using a floating bar chart
+  const opens = ohlc.map(c => c[1]);
+  const highs = ohlc.map(c => c[2]);
+  const lows = ohlc.map(c => c[3]);
+  const isBullish = ohlc.map(c => c[4] >= c[1]);
+
+  // Candle body data [open, close] as floating bars
+  const bodyData = ohlc.map(c => [Math.min(c[1], c[4]), Math.max(c[1], c[4])]);
+  const wickData = ohlc.map(c => [c[3], c[2]]);
+
+  const bullColor = '#00c896';
+  const bearColor = '#ff4d6a';
+  const bodyColors = isBullish.map(b => b ? bullColor + 'cc' : bearColor + 'cc');
+  const wickColors = isBullish.map(b => b ? bullColor + '66' : bearColor + '66');
+
+  const labels = ohlc.map((_, i) => i % 8 === 0 ? `-${n - i}h` : '');
+
+  const datasets = [
+    {
+      label: 'Wick', data: wickData, type: 'bar',
+      backgroundColor: wickColors, borderColor: 'transparent',
+      barThickness: 1
+    },
+    {
+      label: 'Body', data: bodyData, type: 'bar',
+      backgroundColor: bodyColors, borderColor: 'transparent',
+      barThickness: 5
+    }
+  ];
+
+  if (bb) {
+    datasets.push({ label: 'BB Upper', data: Array(n).fill(bb.upper), type: 'line', borderColor: '#ff4d6a88', borderWidth: 1, pointRadius: 0, fill: false, borderDash: [3, 3] });
+    datasets.push({ label: 'BB Mid', data: Array(n).fill(bb.mid), type: 'line', borderColor: '#9b7fff55', borderWidth: 1, pointRadius: 0, fill: false, borderDash: [2, 4] });
+    datasets.push({ label: 'BB Lower', data: Array(n).fill(bb.lower), type: 'line', borderColor: '#00c89688', borderWidth: 1, pointRadius: 0, fill: false, borderDash: [3, 3] });
+  }
+  if (fib) {
+    datasets.push({ label: 'F382', data: Array(n).fill(fib.lvls[0.382]), type: 'line', borderColor: '#4d9fff66', borderWidth: 1, pointRadius: 0, fill: false, borderDash: [5, 4] });
+    datasets.push({ label: 'F618', data: Array(n).fill(fib.lvls[0.618]), type: 'line', borderColor: '#f5a62366', borderWidth: 1, pointRadius: 0, fill: false, borderDash: [5, 4] });
+  }
+
+  const allV = [...closes];
+  if (bb) allV.push(bb.upper, bb.lower);
+  if (fib) allV.push(fib.lvls[0.236], fib.lvls[0.786]);
+  ohlc.forEach(c => allV.push(c[2], c[3]));
+
+  charts[id] = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if (ctx.datasetIndex === 1) {
+                const c = ohlc[ctx.dataIndex];
+                return [`O: $${fmt(c[1])}  H: $${fmt(c[2])}`, `L: $${fmt(c[3])}  C: $${fmt(c[4])}`];
+              }
+              return null;
+            }
+          },
+          filter: (item) => item.datasetIndex === 1
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#4a5060', font: { family: 'IBM Plex Mono', size: 9 } },
+          grid: { color: 'rgba(255,255,255,0.03)' },
+          border: { color: 'transparent' }
+        },
+        y: {
+          position: 'right',
+          min: Math.min(...allV) * 0.9985,
+          max: Math.max(...allV) * 1.0015,
+          ticks: {
+            color: '#4a5060',
+            font: { family: 'IBM Plex Mono', size: 9 },
+            callback: v => v >= 1000 ? '$' + Math.round(v).toLocaleString() : '$' + v.toFixed(0)
+          },
+          grid: { color: 'rgba(255,255,255,0.03)' },
+          border: { color: 'transparent' }
+        }
+      },
+      animation: false
+    }
+  });
+}
+
+function addLog(msg, type = '') {
+  logs.unshift({ ts: ts(), msg, type });
+  if (logs.length > 16) logs.pop();
+  document.getElementById('log-rows').innerHTML = logs.map(e =>
+    `<div class="lrow ${e.type}"><span class="lt">${e.ts}</span><span>${e.msg}</span></div>`
+  ).join('');
+}
+
+async function fetchCandles(pairId) {
+  const end = new Date(), start = new Date(end - 72 * 3600 * 1000);
+  const url = `${BASE}/products/${pairId}/candles?granularity=3600&start=${start.toISOString()}&end=${end.toISOString()}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Candles ${pairId}: HTTP ${r.status}`);
+  const data = await r.json();
+  if (!Array.isArray(data) || data.length === 0) throw new Error(`No candle data for ${pairId}`);
+  // Coinbase returns [timestamp, low, high, open, close, volume] — sort oldest first
+  const sorted = data.sort((a, b) => a[0] - b[0]);
+  const ohlc = sorted.map(c => [c[0], c[3], c[2], c[1], c[4]]); // [ts, open, high, low, close]
+  const closes = ohlc.map(c => c[4]);
+  return { ohlc, closes };
+}
+
+async function fetchTicker(pairId) {
+  const r = await fetch(`${BASE}/products/${pairId}/ticker`);
+  if (!r.ok) throw new Error(`Ticker ${pairId}: HTTP ${r.status}`);
+  const d = await r.json();
+  return { price: parseFloat(d.price), open24: parseFloat(d.open_24h || d.price) };
+}
+
+async function fetchAll() {
+  document.getElementById('upd').textContent = 'SYNCING...';
+  showErr('');
+  try {
+    const results = await Promise.all(PAIRS.map(async ({ id }) => {
+      const [candles, tick] = await Promise.all([fetchCandles(id), fetchTicker(id)]);
+      const change = ((tick.price - tick.open24) / tick.open24) * 100;
+      return { id, ohlc: candles.ohlc, closes: candles.closes, price: tick.price, change };
+    }));
+    results.forEach(({ id, ohlc, closes, price, change }) => {
+      state[id] = { ohlc, closes, price, change };
+    });
+    evaluate();
+    PAIRS.forEach(({ id, label }) => {
+      const s = state[id];
+      if (!s) return;
+      if (s.anySell) addLog(`SELL  ${label}  $${fmt(s.price)}  ${s.sellHits.join(' + ')}`, 'sell');
+      else if (s.anyBuy) addLog(`BUY   ${label}  $${fmt(s.price)}  ${s.buyHits.join(' + ')}`, 'sig');
+      else if (s.anyWarn) addLog(`WARN  ${label}  EW W5 forming`, 'wrn');
+      else addLog(`WATCH ${label}  $${fmt(s.price)}  no signal`);
+    });
+    document.getElementById('upd').textContent = 'SYNCED ' + ts();
+  } catch (e) {
+    showErr(e.message);
+    addLog('ERROR: ' + e.message);
+    document.getElementById('upd').textContent = 'ERROR';
+  }
+}
+
+function initGrid() {
+  document.getElementById('grid').innerHTML = PAIRS.map(({ id, label }) =>
+    `<div class="card" id="c-${id}"><div class="loading">LOADING ${label}...</div></div>`
+  ).join('');
+}
+
+initGrid();
+fetchAll();
+setInterval(fetchAll, 60000);
+</script>
+</body>
+</html>
